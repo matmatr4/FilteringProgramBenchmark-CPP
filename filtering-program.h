@@ -12,7 +12,9 @@
 // 1 = scaling - multi thread
 // 2 = buffer - multi thread with output buffer sized above L2 cache
 // 3 = shared - multi thread with 2 output buffers on each core instead of a shared buffer for 2 threads on one core
-constexpr int EXPERIMENT = 0;
+constexpr int EXPERIMENT = 1;
+
+constexpr unsigned NUM_THREADS = 12;   // number of threads to be used for multithread experiments
 
 // setting fixed unchangeable variables, holding general specifications, which will be used throughout the program
 // constexpr means they cannot be changed while the program is running, and it also guarantees the compiler knows this value when compiling
