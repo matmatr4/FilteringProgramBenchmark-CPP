@@ -23,3 +23,9 @@ constexpr uint16_t THRESHOLD = 1000;
 // events with fewer strong readings are discarded
 constexpr std::size_t MIN_STRONG = 10000; 
 
+// function declaration (done for the compiler to be informed of the existence of these functions and that the structs will be used there)
+uint32_t sum_checksum(const std::vector<uint16_t>& event);
+void generate_events(
+    std::vector<std::vector<uint16_t>>& readings,
+    std::vector<uint32_t>& checksum);
+
