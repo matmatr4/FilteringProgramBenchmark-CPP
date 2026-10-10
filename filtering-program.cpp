@@ -1,8 +1,11 @@
 #include "filtering-program.h"
+#include <chrono> 
+#include <iostream>
 
 int main() {
 
-    // Two empty lists
+    //-------------------------------------------------------------------------------
+    // GENERATING EVENTS
     // nested array which will store all events and readings, readings[i] would show an array containing all readings inside an event, readings[i][i] will show a particular reading of an event
     // uint16_t since each reading is maximum 12-bits
     std::vector<std::vector<uint16_t>> readings;
@@ -22,7 +25,66 @@ int main() {
     //              // event 0   event 1    event 2         event 5999
 
 
+    // print
+    std::cout << "Generating " << NUM_EVENTS << " events...\n";
+
+    // record start time
+    auto gen_starttime = std::chrono::steady_clock::now();
+
     // function to generate events and fill the two lists above
     generate_events(readings, checksum);
 
+    // record end time
+    auto gen_endtime = std::chrono::steady_clock::now();
+
+    // calculate the duration from start time and end time
+    std::chrono::duration<double> DurationGeneration = gen_endtime - gen_starttime;
+
+    // print
+    std::cout << "Generation took " << DurationGeneration.count() << " s\n\n";
+
+    // the size of all th event data that goes through in MB used for printing later
+    double megabytes = NUM_EVENTS * EVENT_READINGS * 2 / 1000000.0;
+
+    //------------------------------------------------------------------------------
+    // FILTERING EVENTS
+    if (EXPERIMENT == 0) {
+        // Baseline: filter every event in a plain loop on one core
+
+        std::cout << "Experiment 0: baseline (one core, no threads)\n";
+        std::size_t kept = 0; // variable for printing
+
+        // record start time
+        auto starttime = std::chrono::steady_clock::now();
+
+        //filtering function
+        for (std::size_t e = 0; e < NUM_EVENTS; e = e + 1) {
+            if (filter_event(readings[e], checksum[e])) {
+                kept = kept + 1;
+            }
+        }
+
+        // record end time
+        auto endtime = std::chrono::steady_clock::now();
+
+        // calculate the duration from start time to end time
+        std::chrono::duration<double> DurationFiltering = endtime - starttime;
+
+        // print
+        std::cout << "Kept " << kept << " of " << NUM_EVENTS << " events (" << 100.0 * kept / NUM_EVENTS << "%)\n";
+        std::cout << "Time: " << DurationFiltering.count() << " s (" << megabytes / DurationFiltering.count() << " MB/s)\n";
+
+    } else if (EXPERIMENT == 1) {
+        // Scaling: filter with NUM_THREADS threads (step 3)
+
+    } else if (EXPERIMENT == 2) {
+        // Buffer: filter with a BUFFER_BYTES output buffer per thread (step 4)
+
+    } else if (EXPERIMENT == 3) {
+        // Shared: one shared output buffer instead of one per thread (step 5)
+
+    } else {
+        std::cout << "Unknown experiment number\n";
+    }
+    return 0;
 }

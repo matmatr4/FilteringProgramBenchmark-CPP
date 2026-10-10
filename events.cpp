@@ -1,8 +1,7 @@
-// events.cpp
-// Generates the synthetic detector events.
+// Generates the synthetic detector events
 // Every event has the same number of readings. Signal events (15%) contain
 // enough strong readings to pass the filter; background events (85%) do not.
-// 1% of events get a wrong checksum so the corruption check has work to do.
+// 1% of events get a wrong checksum so the corruption check has work to do (only background events get corrupted)
 #include "filtering-program.h"
 
 #include <algorithm> // provides the std::shuffle
@@ -26,15 +25,18 @@ uint32_t sum_checksum(const std::vector<uint16_t>& event) {
 // void means the function wont output anything thus only change the variables that were parsed in from the man file which calls this function
 // in brackets the two arguments will be passed from the main function, under which the generated data will be saved
 void generate_events(
-    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<std::vector<uint16_t>>& readings,
     std::vector<uint32_t>& checksum
 ) {
+    readings.resize(NUM_EVENTS);
+    checksum.resize(NUM_EVENTS);
 
     //initializing a random number generator called rng, 12345 inside brackets (seed) suggests it will produce the same sequence of numbers every run
     std::mt19937 rng(12345); // seed: the same events every run
-    
+
     // nested loop for populating the nested array of events and checksum
     for (std::size_t e = 0; e < NUM_EVENTS; ++e) {
+        readings[e].resize(EVENT_READINGS);
 
         // 1 identify if the reading is supposed to be valid or not
 
