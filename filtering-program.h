@@ -19,7 +19,7 @@ constexpr unsigned NUM_THREADS = 12;   // number of threads to be used for multi
 // setting fixed unchangeable variables, holding general specifications, which will be used throughout the program
 // constexpr means they cannot be changed while the program is running, and it also guarantees the compiler knows this value when compiling
 
-constexpr std::size_t NUM_EVENTS = 6000;
+constexpr std::size_t NUM_EVENTS = 30000;
 // each event is set to 20,000 readings = 40 kB per event
 constexpr std::size_t EVENT_READINGS = 20000;
 // a vaild event that should be kept will get 12k strong readings (thus its kept when compared against the 10k threshold)

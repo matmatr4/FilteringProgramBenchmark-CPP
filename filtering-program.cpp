@@ -140,11 +140,16 @@ int main() {
 
         // counting speedup between single and multi threaded experiment
         double speedup = DurationFiltering_0.count() / DurationFiltering_1.count();
+
+        // Amdahl: speedup = 1 / (f + (1 - f) / N), solved for f gives f = (N / speedup - 1) / (N - 1)
         // calculating the serial fraction for multithreaded experiment using Amdahl's Law
-        double serial_fraction = 0;
-        if (NUM_THREADS > 1) {
-            serial_fraction = (1.0 / speedup - 1.0 / NUM_THREADS) / (1.0 - 1.0 / NUM_THREADS);
-        }
+        double serial_fraction = (static_cast<double>(NUM_THREADS) / speedup - 1.0) / (NUM_THREADS - 1.0);
+        // parallel proportion is the remaining part of the work that benefits from more threads
+        double parallel_proportion = 1.0 - serial_fraction;
+
+        // predicting the speedup on 28 cores from the measured serial fraction using Amdahl's Law
+        constexpr unsigned PREDICTED_CORES = 28;
+        double predicted_speedup = 1.0 / (serial_fraction + parallel_proportion / PREDICTED_CORES);
 
         //============================================================ Printing ======================================================
         
@@ -161,7 +166,9 @@ int main() {
 
         // print for calculations
         std::cout << "Speedup: " << speedup << "x\n";
-        std::cout << "Serial fraction (Karp-Flatt): " << serial_fraction * 100 << "%\n";
+        std::cout << "Serial fraction (Amdahl): " << serial_fraction * 100 << "%\n";
+        std::cout << "Parallel proportion (Amdahl): " << parallel_proportion * 100 << "%\n";
+        std::cout << "Predicted speedup on " << PREDICTED_CORES << " cores (Amdahl): " << predicted_speedup << "x\n";
    
     return 0;
 }
