@@ -62,42 +62,39 @@ int main() {
     // print
     std::cout << "Generation took " << DurationGeneration.count() << " s\n\n";
 
+    // make an identical copy of the events and checksum list so each test filters its own fresh events
+    std::vector<std::vector<uint16_t>> readings_copy = readings;
+    std::vector<uint32_t> checksum_copy = checksum;
+
     // the size of all th event data that goes through in MB used for printing later
     double megabytes = NUM_EVENTS * EVENT_READINGS * 2 / 1000000.0;
 
-    //------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------------------------
     // FILTERING EVENTS
-    if (EXPERIMENT == 0) {
-        // Baseline: filter every event in a plain loop on one core
+    
 
-        std::cout << "Experiment 0: baseline (one core, no threads)\n";
-        std::size_t kept = 0; // variable for printing
+        //=============================== 0 Baseline: filter every event in a plain loop on one core ============================
+
+        std::size_t kept_0 = 0; // variable for printing
 
         // record start time
-        auto starttime = std::chrono::steady_clock::now();
+        auto starttime_0 = std::chrono::steady_clock::now();
 
         //filtering function applied to every event
         for (std::size_t e = 0; e < NUM_EVENTS; e = e + 1) {
             if (filter_event(readings[e], checksum[e])) {
-                kept = kept + 1;
+                kept_0 = kept_0 + 1;
             }
         }
 
         // record end time
-        auto endtime = std::chrono::steady_clock::now();
+        auto endtime_0 = std::chrono::steady_clock::now();
 
         // calculate the duration from start time to end time
-        std::chrono::duration<double> DurationFiltering = endtime - starttime;
+        std::chrono::duration<double> DurationFiltering_0 = endtime_0 - starttime_0;
 
-        // print
-        std::cout << "Kept " << kept << " of " << NUM_EVENTS << " events (" << 100.0 * kept / NUM_EVENTS << "%)\n";
-        std::cout << "Time: " << DurationFiltering.count() << " s (" << megabytes / DurationFiltering.count() << " MB/s)\n";
 
-    } else if (EXPERIMENT == 1) {
-        // Scaling: split filtering events across threads with NUM_THREADS threads
-
-        // print
-        std::cout << "Experiment 1: scaling with " << NUM_THREADS << " threads\n";
+        //========== 1 Multithreaded: split filtering events across threads which run simultaneously on multiple cores =============
 
         // starts a list which will hold the running threads 
         std::vector<std::thread> threads;
@@ -105,7 +102,7 @@ int main() {
         std::vector<std::size_t> kept_per_thread(NUM_THREADS);
 
         // record start time
-        auto starttime = std::chrono::steady_clock::now();
+        auto starttime_1 = std::chrono::steady_clock::now();
 
         // loop runs once per thread, with every cycle a thread is created
         for (unsigned t = 0; t < NUM_THREADS; ++t) {
@@ -117,7 +114,7 @@ int main() {
             // push_back adds a new member to the threads list and resizes it as well so it can dynamically add elements to a list
             // std:thread creates a thread with the first argument being the method each of the threads will run
             // std:ref means it will take the original instead of making a copy
-            threads.push_back(std::thread(filter_range, std::ref(readings), std::ref(checksum), first, last, std::ref(kept_per_thread[t])));
+            threads.push_back(std::thread(filter_range, std::ref(readings_copy), std::ref(checksum_copy), first, last, std::ref(kept_per_thread[t])));
         }
 
         // the method waits from executing the rest of the code until every thread has finished, it actually waits for the first thread, and by that time the rest would probably be done
@@ -126,33 +123,45 @@ int main() {
         }
 
         // record end time
-        auto endtime = std::chrono::steady_clock::now();
+        auto endtime_1 = std::chrono::steady_clock::now();
 
         // calculate the duration from start and end time
-        std::chrono::duration<double> DurationFiltering = endtime - starttime;
+        std::chrono::duration<double> DurationFiltering_1 = endtime_1 - starttime_1;
 
         // initialize a variable to store the number of events that were kept
-        std::size_t kept = 0;
+        std::size_t kept_1 = 0;
         // traverse the kept_per_thread list and add every element and save under the kept variable
         for (unsigned t = 0; t < NUM_THREADS; t = t + 1) {
-            kept = kept + kept_per_thread[t];
+            kept_1 = kept_1 + kept_per_thread[t];
         }
 
-        // print
-        std::cout << "Kept " << kept << " of " << NUM_EVENTS << " events ("
-                  << 100.0 * kept / NUM_EVENTS << "%)\n";
-        std::cout << "Time: " << DurationFiltering.count() << " s ("
-                  << megabytes / DurationFiltering.count() << " MB/s)\n";
 
+        //================================================== Performance Calculations ================================================
 
-    } else if (EXPERIMENT == 2) {
-        // Buffer: filter with a BUFFER_BYTES output buffer per thread
+        // counting speedup between single and multi threaded experiment
+        double speedup = DurationFiltering_0.count() / DurationFiltering_1.count();
+        // calculating the serial fraction for multithreaded experiment using Amdahl's Law
+        double serial_fraction = 0;
+        if (NUM_THREADS > 1) {
+            serial_fraction = (1.0 / speedup - 1.0 / NUM_THREADS) / (1.0 - 1.0 / NUM_THREADS);
+        }
 
-    } else if (EXPERIMENT == 3) {
-        // Shared: one shared output buffer instead of one per thread
+        //============================================================ Printing ======================================================
+        
 
-    } else {
-        std::cout << "Unknown experiment number\n";
-    }
+        // print for single threaded 0
+        std::cout << "Experiment 0: baseline (one core, no threads)\n";
+        std::cout << "Kept " << kept_0 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_0 / NUM_EVENTS << "%)\n";
+        std::cout << "Time: " << DurationFiltering_0.count() << " s (" << megabytes / DurationFiltering_0.count() << " MB/s)\n";
+
+        // print for multithreaded 1
+        std::cout << "Experiment 1: scaling with " << NUM_THREADS << " threads\n";
+        std::cout << "Kept " << kept_1 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_1 / NUM_EVENTS << "%)\n";
+        std::cout << "Time: " << DurationFiltering_1.count() << " s (" << megabytes / DurationFiltering_1.count() << " MB/s)\n";
+
+        // print for calculations
+        std::cout << "Speedup: " << speedup << "x\n";
+        std::cout << "Serial fraction (Karp-Flatt): " << serial_fraction * 100 << "%\n";
+   
     return 0;
 }
