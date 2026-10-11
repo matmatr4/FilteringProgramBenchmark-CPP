@@ -4,13 +4,13 @@
 // 1% of events get a wrong checksum so the corruption check has work to do (only background events get corrupted)
 #include "filtering-program.h"
 
-#include <algorithm> // provides the std::shuffle
+#include <algorithm>
 #include <random>
 
 // method which adds up all readings of one event (used to create and later check against checksum)
 // unit32_t is the variable type it gives out, the same as each variable inside 'checksum' array
 // const means it will only read the variable parsed in as the argument, and whats after suggests the type
-// followed by & means ... and event means it will save whats parsed in under a variable called "event"
+// followed by & means that the variable isn't copied, which improves performance and event means it will save whats parsed in under a variable called "event"
 uint32_t sum_checksum(const std::vector<uint16_t>& event) {
     uint32_t sum = 0;
 
@@ -48,10 +48,6 @@ void generate_events(
             strong_count = SIGNAL_STRONG;      // signal event: 12,000 strong readings
         } else {
             strong_count = BACKGROUND_STRONG;  // background event: 2,000 strong readings
-        }
-
-
-
         // 2 fill the readings list for the event
 
         // loop which traverses each reading of this event, and saves a generated value under it
@@ -64,8 +60,6 @@ void generate_events(
                 readings[e][i] = rng() % (THRESHOLD - 100); // generates a number between 0-900 to ensure this number is below the threshold and can be discarded during filtering
             }
         }
-
-
 
         // 3 mix readings, to have random positions
 
@@ -82,8 +76,6 @@ void generate_events(
             readings[e][j] = temp;
         }
 
-
-
         // 4 checksum is made wrong on exactly 1 of every 100 events, of a background (discarded) event thus 15% kept event output is maintained
         
         // checksum list is populated with the sum_checksum function which produces a correct checksum for every event
@@ -95,3 +87,4 @@ void generate_events(
 
     }
 }
+

@@ -11,7 +11,7 @@ void filter_range(std::vector<std::vector<uint16_t>>& readings, std::vector<uint
     kept = 0;
 
     // filtering function applied to every event
-    for (std::size_t e = first; e < last; e = e + 1) {
+    for (std::size_t e = first; e < last; ++e) {
         if (filter_event(readings[e], checksum[e])) {
             kept = kept + 1;
         }
@@ -151,7 +151,7 @@ int main() {
         constexpr unsigned PREDICTED_CORES = 28;
         double predicted_speedup = 1.0 / (serial_fraction + parallel_proportion / PREDICTED_CORES);
 
-        //============================================================ Printing ======================================================
+        //============================================================ Printing ====================================================
         
 
         // print for single threaded 0

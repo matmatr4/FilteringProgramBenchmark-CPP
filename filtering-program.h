@@ -30,3 +30,4 @@ void generate_events(
     std::vector<std::vector<uint16_t>>& readings,
     std::vector<uint32_t>& checksum);
 bool filter_event(std::vector<uint16_t>& event, uint32_t stored_checksum);
+
