@@ -48,6 +48,8 @@ void generate_events(
             strong_count = SIGNAL_STRONG;      // signal event: 12,000 strong readings
         } else {
             strong_count = BACKGROUND_STRONG;  // background event: 2,000 strong readings
+        }
+
         // 2 fill the readings list for the event
 
         // loop which traverses each reading of this event, and saves a generated value under it
@@ -85,6 +87,6 @@ void generate_events(
             checksum[e] = checksum[e] + 1;
         }
 
-    }
+    }   
+    
 }
-
