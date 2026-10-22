@@ -21,10 +21,10 @@ The repository has two parts: the full system design report I wrote for Precisio
 ```
 FilteringProgramBenchmark-CPP/
 ├── README.md
+├── Makefile                          build configuration for the benchmark
 ├── Recommended System Report.pdf     the full system design report
 ├── Recommended System Report.docx    the same report in Word format
-└── Source Code/                      the benchmark program
-    ├── Makefile
+└── src/                              the benchmark source code
     ├── filtering-program.h
     ├── filtering-program.cpp
     ├── filter.cpp
@@ -42,9 +42,9 @@ FilteringProgramBenchmark-CPP/
 
 The benchmark's settings (15% signal events, the noise threshold and the 28-core prediction) come from the assumptions in the report. The program output and source code are also included in the report's appendix.
 
-### Source Code
+### Source code
 
-Everything needed to build and run the benchmark:
+The benchmark's source files, in `src/`:
 
 | File | Purpose |
 |------|---------|
@@ -52,7 +52,8 @@ Everything needed to build and run the benchmark:
 | `events.cpp` | Generates the synthetic events and checksums (fixed seed, so every run gets the same data) |
 | `filter.cpp` | `filter_event`: the checksum check, threshold filtering and keep/discard decision |
 | `filtering-program.cpp` | `main`: runs the generation step and both experiments, then prints the results |
-| `Makefile` | Build configuration |
+
+The `Makefile` in the repository root builds every `.cpp` file in `src/`.
 
 ## Requirements
 
@@ -62,12 +63,10 @@ Everything needed to build and run the benchmark:
 
 ## Build and run
 
-Run these from inside the `Source Code` directory:
+Run these from the repository root:
 
 ```bash
-cd "Source Code"
-
-# build (output goes to Source Code/build/filtering-program)
+# build (output goes to build/filtering-program)
 make
 
 # build and run
@@ -89,7 +88,7 @@ make CXXFLAGS="-std=c++17 -O3 -march=native"
 
 ## Configuration
 
-All settings live as `constexpr` constants in [filtering-program.h](Source%20Code/filtering-program.h). Edit them and rebuild:
+All settings live as `constexpr` constants in [filtering-program.h](src/filtering-program.h). Edit them and rebuild:
 
 | Constant | Default | Meaning |
 |----------|---------|---------|
