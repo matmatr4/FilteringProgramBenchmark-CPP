@@ -4,6 +4,7 @@ bool filter_event(
     std::vector<uint16_t>& event,
     uint32_t stored_checksum
 ) // both arguments are not read only
+  //event is modified in place; stored_checksum is a copy
 {
     //invalid events return false
     
