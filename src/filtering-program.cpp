@@ -23,13 +23,21 @@ void filter_range(std::vector<std::vector<uint16_t>>& readings, std::vector<uint
 std::vector<std::vector<uint16_t>> filtered_readings;
 std::mutex shared;
 
-void mutex_filter_range(std::vector<std::vector<uint16_t>>& readings, std::vector<uint32_t>& checksum, std::size_t first, std::size_t last, std::size_t& kept2) {
+void mutex_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept2) 
+
+{
     std::size_t kept = 0;
 
     // filtering function applied to every event
     for (std::size_t e = first; e < last; ++e) {
         if (filter_event(readings[e], checksum[e])) {
             kept = kept + 1;
+            // saves event into the shared structure
             addToShared(readings[e]);
         }
     }
@@ -39,9 +47,10 @@ void mutex_filter_range(std::vector<std::vector<uint16_t>>& readings, std::vecto
 
 void addToShared(std::vector<uint16_t>& event) {
 
-    shared.lock();
-    filtered_readings.push_back(event);
-    shared.unlock();
+    // same lock behaviour as with .lock() and .unlock() but 
+    std::lock_guard<std::mutex> lock(shared); 
+    filtered_readings.push_back(std::move(event)); // move here ensure the data is not copied, but moved, so event is turned empty, that way its quicker and thousands of readings dont need to be copied
+    
 }
 
 
@@ -180,8 +189,12 @@ int main() {
         // a list which stores the number of kept events for each thread 
         std::vector<std::size_t> kept_per_thread2(NUM_THREADS);
 
-        //clears the array of filtered events, between runs
+        // clears the array of filtered events, between runs
         filtered_readings.clear();
+
+        // reserves space for this array
+        filtered_readings.reserve(NUM_EVENTS);
+        // Without reserve, the vector starts empty and doubles its capacity each time it fills (1, 2, 4, … 1,024), so for 900 events it reallocates about 11 times, each time moving every stored event while the other threads wait on the mutex. reserve avoids this by allocating all the space once, before timing starts.
 
         // record start time
         auto starttime_2 = std::chrono::steady_clock::now();
@@ -264,7 +277,7 @@ int main() {
         // print for multithreaded mutex 2
         std::cout << "Experiment 2: baseline mutex multithreaded with " << NUM_THREADS << " threads\n";
         std::cout << "Kept " << kept_2 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_2 / NUM_EVENTS << "%)\n";
-        std::cout << "Kept in the shared buffer " << filtered_readings.size() << " of " << NUM_EVENTS << " events (" << 100.0 * kept_2 / NUM_EVENTS << "%)\n";
+        std::cout << "Kept in the shared buffer " << filtered_readings.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_2.count() << " s (" << megabytes / DurationFiltering_2.count() << " MB/s)\n\n";
 
         // print for multithreaded buffered mutex 3
