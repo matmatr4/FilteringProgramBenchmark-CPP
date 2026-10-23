@@ -8,6 +8,8 @@
 #include <vector>
 
 constexpr unsigned NUM_THREADS = 12;   // number of threads to be used for multithread experiments
+constexpr std::size_t BUFFER_SIZE = 64; // since the number of strong events in a valid signal is fixed to 12k, and 64 events x 12 000 readings x 2 bytes = 1.536 MB, roughly what the report assumes
+// if a non constant number of readings per event was used, this would need to be specified in bytes, and the calculation would occur to calculate size of each event etc. not hard to modify but for simplicity it's left like this
 
 // setting fixed unchangeable variables, holding general specifications, which will be used throughout the program
 // constexpr means they cannot be changed while the program is running, and it also guarantees the compiler knows this value when compiling
@@ -30,5 +32,14 @@ void generate_events(
     std::vector<std::vector<uint16_t>>& readings,
     std::vector<uint32_t>& checksum);
 bool filter_event(std::vector<uint16_t>& event, uint32_t stored_checksum);
-void addToShared(std::vector<uint16_t>& event);
+void addToShared(std::vector<uint16_t>& event, std::vector<std::vector<uint16_t>>& filtered_events);
+void buffered_mutex_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept3);
+void addToSharedBuffer(
+    std::vector<std::vector<uint16_t>>& buffer, 
+    std::vector<std::vector<uint16_t>>& filtered_events);
 

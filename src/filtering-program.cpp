@@ -20,7 +20,11 @@ void filter_range(std::vector<std::vector<uint16_t>>& readings, std::vector<uint
     kept1 = kept;
 }
 
-std::vector<std::vector<uint16_t>> filtered_readings;
+
+
+
+
+std::vector<std::vector<uint16_t>> filtered_readings2;
 std::mutex shared;
 
 void mutex_filter_range(
@@ -38,20 +42,81 @@ void mutex_filter_range(
         if (filter_event(readings[e], checksum[e])) {
             kept = kept + 1;
             // saves event into the shared structure
-            addToShared(readings[e]);
+            addToShared(readings[e], filtered_readings2);
         }
     }
 
     kept2 = kept;
 }
 
-void addToShared(std::vector<uint16_t>& event) {
+void addToShared(std::vector<uint16_t>& event, std::vector<std::vector<uint16_t>>& filtered_events) {
 
-    // same lock behaviour as with .lock() and .unlock() but 
+    // same lock behaviour as with .lock() and .unlock() but with error handling
     std::lock_guard<std::mutex> lock(shared); 
-    filtered_readings.push_back(std::move(event)); // move here ensure the data is not copied, but moved, so event is turned empty, that way its quicker and thousands of readings dont need to be copied
+    filtered_events.push_back(std::move(event)); 
+    // move here ensure the data is not copied, but moved, so event is turned empty, that way its quicker and thousands of readings dont need to be copied
     
 }
+
+
+
+
+
+std::vector<std::vector<uint16_t>> filtered_readings3;
+
+void buffered_mutex_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept3) 
+
+{
+    std::size_t kept = 0;
+
+    std::vector<std::vector<uint16_t>> filtered_buffer;
+    filtered_buffer.reserve(BUFFER_SIZE);
+
+    // filtering function applied to every event
+    for (std::size_t e = first; e < last; ++e) {
+        if (filter_event(readings[e], checksum[e])) {
+            kept = kept + 1;
+
+            // if using buffer in bytes size, additional check for event not fitting into the whole buffer should be added
+
+            // moving readings to the buffer
+            filtered_buffer.push_back(std::move(readings[e]));
+            
+            if (filtered_buffer.size() == BUFFER_SIZE) {
+                // flushes the current buffer into the shared structure
+                addToSharedBuffer(filtered_buffer, filtered_readings3);
+            }
+        }
+    }
+
+    // flush the leftovers
+    if (!filtered_buffer.empty()) {
+        addToSharedBuffer(filtered_buffer, filtered_readings3);
+    }
+
+    kept3 = kept;
+}
+
+void addToSharedBuffer(std::vector<std::vector<uint16_t>>& buffer, std::vector<std::vector<uint16_t>>& filtered_events) {
+
+    // same lock behaviour as with .lock() and .unlock() but with error handling
+    std::lock_guard<std::mutex> lock(shared); 
+    for (std::size_t e = 0; e < buffer.size(); ++e) {
+
+        filtered_events.push_back(std::move(buffer[e])); 
+        // it moves whats inside the buffer, deleting it, and leaving it only in filtered_events, which is desired
+    
+    }
+
+    buffer.clear(); // to remove empty slots
+}
+
+
 
 
 
@@ -102,6 +167,8 @@ int main() {
     std::vector<uint32_t> checksum_copy = checksum;
     std::vector<std::vector<uint16_t>> readings_copy2 = readings;
     std::vector<uint32_t> checksum_copy2 = checksum;
+    std::vector<std::vector<uint16_t>> readings_copy3 = readings;
+    std::vector<uint32_t> checksum_copy3 = checksum;
 
     // the size of all th event data that goes through in MB used for printing later
     double megabytes = NUM_EVENTS * EVENT_READINGS * 2 / 1000000.0;
@@ -190,10 +257,10 @@ int main() {
         std::vector<std::size_t> kept_per_thread2(NUM_THREADS);
 
         // clears the array of filtered events, between runs
-        filtered_readings.clear();
+        filtered_readings2.clear();
 
         // reserves space for this array
-        filtered_readings.reserve(NUM_EVENTS);
+        filtered_readings2.reserve(NUM_EVENTS);
         // Without reserve, the vector starts empty and doubles its capacity each time it fills (1, 2, 4, … 1,024), so for 900 events it reallocates about 11 times, each time moving every stored event while the other threads wait on the mutex. reserve avoids this by allocating all the space once, before timing starts.
 
         // record start time
@@ -233,7 +300,48 @@ int main() {
 
         //=============================== 3 Mutex: split across threads with a shared structure and each its own output buffer ============================
 
+        // starts a list which will hold the running threads 
+        std::vector<std::thread> threads3;
+        // a list which stores the number of kept events for each thread 
+        std::vector<std::size_t> kept_per_thread3(NUM_THREADS);
 
+        // clears the array of filtered events, between runs
+        filtered_readings3.clear();
+
+        // reserves space for this array
+        filtered_readings3.reserve(NUM_EVENTS);
+        // Without reserve, the vector starts empty and doubles its capacity each time it fills (1, 2, 4, … 1,024), so for 900 events it reallocates about 11 times, each time moving every stored event while the other threads wait on the mutex. reserve avoids this by allocating all the space once, before timing starts.
+
+        // record start time
+        auto starttime_3 = std::chrono::steady_clock::now();
+
+        for (unsigned t = 0; t < NUM_THREADS; ++t) {
+            // calculates the position of the first event
+            std::size_t first = t * NUM_EVENTS / NUM_THREADS;
+            // calculates the position of the last event, the last event for one thread will overlap with the first event for another thread, but the filter_range takes care of that
+            std::size_t last = (t + 1) * NUM_EVENTS / NUM_THREADS; 
+
+            // push_back adds a new member to the threads list and resizes it as well so it can dynamically add elements to a list
+            // std:thread creates a thread with the first argument being the method each of the threads will run
+            // std:ref means it will take the original instead of making a copy
+            threads3.push_back(std::thread(buffered_mutex_filter_range, std::ref(readings_copy3), std::ref(checksum_copy3), first, last, std::ref(kept_per_thread3[t])));
+        }
+
+        for (unsigned t = 0; t < NUM_THREADS; ++t) {
+           threads3[t].join();
+        }
+
+        // record end time
+        auto endtime_3 = std::chrono::steady_clock::now();
+
+        // calculate the duration from start time to end time
+        std::chrono::duration<double> DurationFiltering_3 = endtime_3 - starttime_3;
+
+        std::size_t kept_3 = 0;
+        // traverse the kept_per_thread list and add every element and save under the kept variable
+        for (unsigned t = 0; t < NUM_THREADS; t = t + 1) {
+            kept_3 = kept_3 + kept_per_thread3[t];
+        }
 
 
 
@@ -253,6 +361,33 @@ int main() {
         // predicting the speedup on 28 cores from the measured serial fraction using Amdahl's Law
         constexpr unsigned PREDICTED_CORES = 28;
         double predicted_speedup = 1.0 / (serial_fraction + parallel_proportion / PREDICTED_CORES);
+
+
+        // experiment 2 and 3
+        // counting speedup between single and multi threaded experiment
+        double speedup2 = DurationFiltering_0.count() / DurationFiltering_2.count();
+        double speedup3 = DurationFiltering_0.count() / DurationFiltering_3.count();
+
+        // Amdahl: speedup = 1 / (f + (1 - f) / N), solved for f gives f = (N / speedup - 1) / (N - 1)
+        // calculating the serial fraction for multithreaded experiment using Amdahl's Law
+        double serial_fraction2 = (static_cast<double>(NUM_THREADS) / speedup2 - 1.0) / (NUM_THREADS - 1.0);
+        // parallel proportion is the remaining part of the work that benefits from more threads
+        double parallel_proportion2 = 1.0 - serial_fraction2;
+
+        double serial_fraction3 = (static_cast<double>(NUM_THREADS) / speedup3 - 1.0) / (NUM_THREADS - 1.0);
+        // parallel proportion is the remaining part of the work that benefits from more threads
+        double parallel_proportion3 = 1.0 - serial_fraction3;
+
+
+        // gain from adding a buffer
+        double buffer_gain = DurationFiltering_2.count() / DurationFiltering_3.count();
+
+        // predicting the speedup on 28 cores from the measured serial fraction using Amdahl's Law
+        double predicted_speedup2 = 1.0 / (serial_fraction2 + parallel_proportion2 / PREDICTED_CORES);
+        double predicted_speedup3 = 1.0 / (serial_fraction3 + parallel_proportion3 / PREDICTED_CORES);
+
+
+
 
         //============================================================ Printing ====================================================
         
@@ -277,12 +412,28 @@ int main() {
         // print for multithreaded mutex 2
         std::cout << "Experiment 2: baseline mutex multithreaded with " << NUM_THREADS << " threads\n";
         std::cout << "Kept " << kept_2 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_2 / NUM_EVENTS << "%)\n";
-        std::cout << "Kept in the shared buffer " << filtered_readings.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings.size() / NUM_EVENTS << "%)\n";
+        std::cout << "Kept in the shared buffer " << filtered_readings2.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings2.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_2.count() << " s (" << megabytes / DurationFiltering_2.count() << " MB/s)\n\n";
 
         // print for multithreaded buffered mutex 3
+        std::cout << "Experiment 3: buffered mutex multithreaded with " << NUM_THREADS << " threads\n";
+        std::cout << "Kept " << kept_3 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_3 / NUM_EVENTS << "%)\n";
+        std::cout << "Kept in the shared buffer " << filtered_readings3.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings3.size() / NUM_EVENTS << "%)\n";
+        std::cout << "Time: " << DurationFiltering_3.count() << " s (" << megabytes / DurationFiltering_3.count() << " MB/s)\n\n";
 
         // print for calculations
+        std::cout << "Speedup for 2: " << speedup2 << "x\n";
+        std::cout << "Speedup for 3: " << speedup3 << "x\n\n";
+
+        std::cout << "Serial fraction for experiment 2 (Amdahl): " << serial_fraction2 * 100 << "%\n";
+        std::cout << "Parallel proportion for experiment 2 (Amdahl): " << parallel_proportion2 * 100 << "%\n";
+        std::cout << "Predicted speedup on " << PREDICTED_CORES << " cores for experiment 2 (Amdahl): " << predicted_speedup2 << "x\n\n";
+
+        std::cout << "Serial fraction for experiment 3 (Amdahl): " << serial_fraction3 * 100 << "%\n";
+        std::cout << "Parallel proportion for experiment 3 (Amdahl): " << parallel_proportion3 * 100 << "%\n";
+        std::cout << "Predicted speedup on " << PREDICTED_CORES << " cores for experiment 3 (Amdahl): " << predicted_speedup3 << "x\n\n";
+
+        std::cout << "Measured gain from adding an output buffer: " << buffer_gain << "x\n\n\n";
    
     return 0;
 }
