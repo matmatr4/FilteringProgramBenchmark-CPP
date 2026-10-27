@@ -42,4 +42,10 @@ void buffered_mutex_filter_range(
 void addToSharedBuffer(
     std::vector<std::vector<uint16_t>>& buffer, 
     std::vector<std::vector<uint16_t>>& filtered_events);
-
+void addToSharedAtomic(std::vector<uint16_t>& event, std::vector<std::vector<uint16_t>>& filtered_events);
+void atomic_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept4);
