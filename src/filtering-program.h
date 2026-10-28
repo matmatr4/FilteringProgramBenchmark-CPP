@@ -49,3 +49,11 @@ void atomic_filter_range(
     std::size_t first, 
     std::size_t last, 
     std::size_t& kept4);
+void addToSharedAtomicBuffer(std::vector<std::vector<uint16_t>>& buffer, std::vector<std::vector<uint16_t>>& filtered_events);
+void buffered_atomic_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept5);
+

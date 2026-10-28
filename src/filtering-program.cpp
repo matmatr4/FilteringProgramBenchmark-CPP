@@ -165,6 +165,64 @@ void addToSharedAtomic(std::vector<uint16_t>& event, std::vector<std::vector<uin
 
 
 
+// experiment 5
+
+std::vector<std::vector<uint16_t>> filtered_readings5;
+
+void buffered_atomic_filter_range(
+    std::vector<std::vector<uint16_t>>& readings, 
+    std::vector<uint32_t>& checksum, 
+    std::size_t first, 
+    std::size_t last, 
+    std::size_t& kept5) 
+
+{
+    std::size_t kept = 0;
+
+    std::vector<std::vector<uint16_t>> filtered_buffer;
+    filtered_buffer.reserve(BUFFER_SIZE);
+
+    // filtering function applied to every event
+    for (std::size_t e = first; e < last; ++e) {
+        if (filter_event(readings[e], checksum[e])) {
+            kept = kept + 1;
+
+            // if using buffer in bytes size, additional check for event not fitting into the whole buffer should be added
+
+            // moving readings to the buffer
+            filtered_buffer.push_back(std::move(readings[e]));
+            
+            if (filtered_buffer.size() == BUFFER_SIZE) {
+                // flushes the current buffer into the shared structure
+                addToSharedAtomicBuffer(filtered_buffer, filtered_readings5);
+            }
+        }
+    }
+
+    // flush the leftovers
+    if (!filtered_buffer.empty()) {
+        addToSharedAtomicBuffer(filtered_buffer, filtered_readings5);
+    }
+
+    kept5 = kept;
+}
+
+void addToSharedAtomicBuffer(std::vector<std::vector<uint16_t>>& buffer, std::vector<std::vector<uint16_t>>& filtered_events) {
+
+    for (std::size_t e = 0; e < buffer.size(); ++e) {
+
+        std::size_t current_shared_out_slot = next_free_shared_out_slot.fetch_add(1); // saving, adding and overwriting the variable needs to be in one line
+        filtered_events[current_shared_out_slot] = (std::move(buffer[e])); 
+        // it moves whats inside the buffer, deleting it, and leaving it only in filtered_events, which is desired
+    
+    }
+
+    buffer.clear(); // to remove empty slots
+}
+
+
+
+
 
 // the main method
 int main() {
@@ -206,7 +264,8 @@ int main() {
     std::chrono::duration<double> DurationGeneration = gen_endtime - gen_starttime;
 
     // print
-    std::cout << "Generation took " << DurationGeneration.count() << " s\n\n";
+    std::cout << "Generation took " << DurationGeneration.count() << " s\n\n\n";
+    std::cout << "------------------------------------------------------------\n\n\n";
 
     // make an identical copy of the events and checksum list so each test filters its own fresh events
     std::vector<std::vector<uint16_t>> readings_copy = readings;
@@ -217,8 +276,8 @@ int main() {
     std::vector<uint32_t> checksum_copy3 = checksum;
     std::vector<std::vector<uint16_t>> readings_copy4 = readings;
     std::vector<uint32_t> checksum_copy4 = checksum;
-    //std::vector<std::vector<uint16_t>> readings_copy5 = readings;
-    //std::vector<uint32_t> checksum_copy5 = checksum;
+    std::vector<std::vector<uint16_t>> readings_copy5 = readings;
+    std::vector<uint32_t> checksum_copy5 = checksum;
 
     // the size of all th event data that goes through in MB used for printing later
     double megabytes = NUM_EVENTS * EVENT_READINGS * 2 / 1000000.0;
@@ -446,7 +505,60 @@ int main() {
 
         filtered_readings4.resize(next_free_shared_out_slot);
 
+
+
+
+
         //=============================== 5 Atomic: split across threads with a shared structure and an atomic variable counter instead of a mutex, and an output buffer ============================
+
+        // starts a list which will hold the running threads 
+        std::vector<std::thread> threads5;
+        // a list which stores the number of kept events for each thread 
+        std::vector<std::size_t> kept_per_thread5(NUM_THREADS);
+
+        // clears the array of filtered events, between runs
+        filtered_readings5.clear();
+
+        // set the size of the array, since there is no mutex anymore, thus it cannot be dynamic
+        filtered_readings5.resize(NUM_EVENTS);
+
+        // save the next free slot to 0, as the filtered array is empty
+        next_free_shared_out_slot = 0;
+
+        // record start time
+        auto starttime_5 = std::chrono::steady_clock::now();
+
+        for (unsigned t = 0; t < NUM_THREADS; ++t) {
+            // calculates the position of the first event
+            std::size_t first = t * NUM_EVENTS / NUM_THREADS;
+            // calculates the position of the last event, the last event for one thread will overlap with the first event for another thread, but the filter_range takes care of that
+            std::size_t last = (t + 1) * NUM_EVENTS / NUM_THREADS; 
+
+            // push_back adds a new member to the threads list and resizes it as well so it can dynamically add elements to a list
+            // std:thread creates a thread with the first argument being the method each of the threads will run
+            // std:ref means it will take the original instead of making a copy
+            threads5.push_back(std::thread(buffered_atomic_filter_range, std::ref(readings_copy5), std::ref(checksum_copy5), first, last, std::ref(kept_per_thread5[t])));
+        }
+
+        for (unsigned t = 0; t < NUM_THREADS; ++t) {
+           threads5[t].join();
+        }
+
+        // record end time
+        auto endtime_5 = std::chrono::steady_clock::now();
+
+        // calculate the duration from start time to end time
+        std::chrono::duration<double> DurationFiltering_5 = endtime_5 - starttime_5;
+
+        std::size_t kept_5 = 0;
+        // traverse the kept_per_thread list and add every element and save under the kept variable
+        for (unsigned t = 0; t < NUM_THREADS; t = t + 1) {
+            kept_5 = kept_5 + kept_per_thread5[t];
+        }
+
+        filtered_readings5.resize(next_free_shared_out_slot);
+
+
 
 
 
@@ -495,7 +607,7 @@ int main() {
         // experiment 4 and 5
         // counting speedup between single and multi threaded experiment
         double speedup4 = DurationFiltering_0.count() / DurationFiltering_4.count();
-        /*double speedup5 = DurationFiltering_0.count() / DurationFiltering_5.count();
+        double speedup5 = DurationFiltering_0.count() / DurationFiltering_5.count();
 
         // Amdahl: speedup = 1 / (f + (1 - f) / N), solved for f gives f = (N / speedup - 1) / (N - 1)
         // calculating the serial fraction for multithreaded experiment using Amdahl's Law
@@ -514,7 +626,7 @@ int main() {
         // predicting the speedup on 28 cores from the measured serial fraction using Amdahl's Law
         double predicted_speedup4 = 1.0 / (serial_fraction4 + parallel_proportion4 / PREDICTED_CORES);
         double predicted_speedup5 = 1.0 / (serial_fraction5 + parallel_proportion5 / PREDICTED_CORES);
-        */
+        
 
 
 
@@ -537,18 +649,24 @@ int main() {
         std::cout << "Parallel proportion (Amdahl): " << parallel_proportion * 100 << "%\n";
         std::cout << "Predicted speedup on " << PREDICTED_CORES << " cores (Amdahl): " << predicted_speedup << "x\n\n\n";
 
+        std::cout << "------------------------------------------------------------\n\n\n";
 
-        // print for multithreaded mutex 2
+
+
+
+        // print for experiment 2
         std::cout << "Experiment 2: baseline mutex multithreaded with " << NUM_THREADS << " threads\n";
         std::cout << "Kept " << kept_2 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_2 / NUM_EVENTS << "%)\n";
         std::cout << "Kept in the shared buffer " << filtered_readings2.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings2.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_2.count() << " s (" << megabytes / DurationFiltering_2.count() << " MB/s)\n\n";
 
-        // print for multithreaded buffered mutex 3
+
+        // print for experiment 3
         std::cout << "Experiment 3: buffered mutex multithreaded with " << NUM_THREADS << " threads\n";
         std::cout << "Kept " << kept_3 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_3 / NUM_EVENTS << "%)\n";
         std::cout << "Kept in the shared buffer " << filtered_readings3.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings3.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_3.count() << " s (" << megabytes / DurationFiltering_3.count() << " MB/s)\n\n";
+    
 
         // print for calculations 2 and 3
         std::cout << "Speedup for 2: " << speedup2 << "x\n";
@@ -564,6 +682,10 @@ int main() {
 
         std::cout << "Measured gain from adding an output buffer: " << buffer_gain << "x\n\n\n";
 
+        std::cout << "------------------------------------------------------------\n\n\n";
+
+    
+
 
 
         // print for experiment 4
@@ -572,16 +694,17 @@ int main() {
         std::cout << "Kept in the shared buffer " << filtered_readings4.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings4.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_4.count() << " s (" << megabytes / DurationFiltering_4.count() << " MB/s)\n\n";
 
-        /*
+
         // print for experiment 5
         std::cout << "Experiment 5: buffered atomic count multithreaded with " << NUM_THREADS << " threads\n";
         std::cout << "Kept " << kept_5 << " of " << NUM_EVENTS << " events (" << 100.0 * kept_5 / NUM_EVENTS << "%)\n";
         std::cout << "Kept in the shared buffer " << filtered_readings5.size() << " of " << NUM_EVENTS << " events (" << 100.0 * filtered_readings5.size() / NUM_EVENTS << "%)\n";
         std::cout << "Time: " << DurationFiltering_5.count() << " s (" << megabytes / DurationFiltering_5.count() << " MB/s)\n\n";
-        */
+        
+
         // print for calculations 4 and 5
         std::cout << "Speedup for 4: " << speedup4 << "x\n";
-        /*std::cout << "Speedup for 5: " << speedup5 << "x\n\n";
+        std::cout << "Speedup for 5: " << speedup5 << "x\n\n";
 
         std::cout << "Serial fraction for experiment 4 (Amdahl): " << serial_fraction4 * 100 << "%\n";
         std::cout << "Parallel proportion for experiment 4 (Amdahl): " << parallel_proportion4 * 100 << "%\n";
@@ -592,8 +715,10 @@ int main() {
         std::cout << "Predicted speedup on " << PREDICTED_CORES << " cores for experiment 5 (Amdahl): " << predicted_speedup5 << "x\n\n";
 
         std::cout << "Measured gain from adding an output buffer: " << buffer_gain45 << "x\n\n\n";
+
+        std::cout << "------------------------------------------------------------\n\n\n";
+
         
-        */
 
     return 0;
 }
