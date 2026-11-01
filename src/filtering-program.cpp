@@ -718,7 +718,29 @@ int main() {
 
         std::cout << "------------------------------------------------------------\n\n\n";
 
+        // print comparison of mutex and atomic
+        std::cout << "Comparing Speedup in Different Scenarios: \n\n";
+        std::cout << "Mutex vs atomic, per event (2 vs 4): " << DurationFiltering_2.count() / DurationFiltering_4.count() << "x\n";
+        std::cout << "Mutex vs atomic, buffered (3 vs 5): " << DurationFiltering_3.count() / DurationFiltering_5.count() << "x\n";
         
+        
+        double Fastest = std::min({DurationFiltering_2.count(), DurationFiltering_3.count(), DurationFiltering_4.count(), DurationFiltering_5.count()});
+        std::string FastestName;
+
+        if (Fastest == DurationFiltering_2.count()) {
+            FastestName = "Unbuffered Mutex";
+        }
+        else if (Fastest == DurationFiltering_3.count()){
+            FastestName = "Unbuffered Atomic";
+        }
+        else if (Fastest == DurationFiltering_4.count()){
+            FastestName = "Buffered Mutex";
+        }
+        else if (Fastest == DurationFiltering_5.count()){
+            FastestName = "Buffered Atomic";
+        }
+
+        std::cout << "Fastest overall: " << FastestName << "\n\n";
 
     return 0;
 }
