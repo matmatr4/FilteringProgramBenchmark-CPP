@@ -209,10 +209,12 @@ void buffered_atomic_filter_range(
 
 void addToSharedAtomicBuffer(std::vector<std::vector<uint16_t>>& buffer, std::vector<std::vector<uint16_t>>& filtered_events) {
 
+    // reserve slots in the shared buffer for the thread once
+    std::size_t current_shared_out_slot = next_free_shared_out_slot.fetch_add(buffer.size()); 
+
     for (std::size_t e = 0; e < buffer.size(); ++e) {
 
-        std::size_t current_shared_out_slot = next_free_shared_out_slot.fetch_add(1); // saving, adding and overwriting the variable needs to be in one line
-        filtered_events[current_shared_out_slot] = (std::move(buffer[e])); 
+        filtered_events[current_shared_out_slot + e] = (std::move(buffer[e])); 
         // it moves whats inside the buffer, deleting it, and leaving it only in filtered_events, which is desired
     
     }
@@ -731,10 +733,10 @@ int main() {
             FastestName = "Unbuffered Mutex";
         }
         else if (Fastest == DurationFiltering_3.count()){
-            FastestName = "Unbuffered Atomic";
+            FastestName = "Buffered Mutex";
         }
         else if (Fastest == DurationFiltering_4.count()){
-            FastestName = "Buffered Mutex";
+            FastestName = "Unbuffered Atomic";
         }
         else if (Fastest == DurationFiltering_5.count()){
             FastestName = "Buffered Atomic";
